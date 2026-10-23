@@ -1,0 +1,10 @@
+{
+  "name": "budgetflow",
+  "version": "1.0.0",
+  "private": true,
+  "description": "BudgetFlow - finanzas personales",
+  "type": "module",
+  "scripts": { "build": "node build.mjs", "preview": "node build.mjs --preview", "deploy": "node build.mjs && firebase deploy" },
+  "dependencies": { "react": "^19.2.0", "react-dom": "^19.2.0" },
+  "devDependencies": { "esbuild": "^0.25.0" }
+}
