@@ -1,7 +1,5 @@
 // Modo demo: datos de ejemplo guardados solo en este navegador.
-import { periodOf, addMonths } from '../finance.js';
-
-const KEY = 'budgetflow-demo-v2';
+const KEY = 'budgetflow-demo-v4';
 let mem = null;
 const read = () => { try { const s = localStorage.getItem(KEY); return s ? JSON.parse(s) : mem; } catch { return mem; } };
 const write = (db) => { mem = db; try { localStorage.setItem(KEY, JSON.stringify(db)); } catch { /* sin storage */ } };
@@ -9,54 +7,30 @@ const byId = (arr) => Object.fromEntries(arr.map((x) => [x.id, x]));
 
 function demoData() {
   const now = Date.now();
-  const K = periodOf(now, 'last');
   const DAY = 864e5;
-  const ago = (d, h = 13) => { const t = new Date(now - d * DAY); t.setHours(h, 0, 0, 0); return t.getTime(); };
-  const cards = [
-    { id: 'visa', name: 'Visa Galicia', closeDay: 28, dueDay: 5, color: 'violet' },
-    { id: 'master', name: 'Master BBVA', closeDay: 24, dueDay: 3, color: 'red' },
-  ];
-  const dayIn = (n) => new Date(now + n * DAY).getDate();
-  const since = ago(100);
-  const E = (id, d, amount, category, method, note = '', currency = 'ARS') => ({ id, date: ago(d), amount, currency, category, method, note, createdAt: ago(d) });
-  const expenses = [
-    E('e1', 1, 23500, 'Súper', 'debit', 'Coto'), E('e2', 1, 8500, 'Comida', 'cash', 'Almuerzo'),
-    E('e3', 2, 18000, 'Salidas', 'visa', 'Cerveza con amigos'), E('e4', 3, 4200, 'Transporte', 'debit', 'SUBE'),
-    E('e5', 4, 31000, 'Súper', 'visa', 'Carrefour'), E('e6', 5, 12, 'Varios', 'visa', 'App store', 'USD'),
-    E('e7', 6, 15000, 'Salidas', 'cash', 'Cine'), E('e8', 8, 42000, 'Ropa', 'master', 'Remera'),
-    E('e9', 10, 27000, 'Súper', 'debit', 'Día'), E('e10', 12, 9800, 'Salud', 'cash', 'Farmacia'),
-    E('e11', 15, 35000, 'Salidas', 'visa', 'Cumple'), E('e12', 18, 22000, 'Comida', 'debit', 'Pedidos Ya'),
-    E('e13', 22, 54000, 'Hogar', 'master', 'Sábanas'), E('e14', 26, 19000, 'Súper', 'debit'),
-    E('e15', 35, 61000, 'Súper', 'visa'), E('e16', 40, 25000, 'Salidas', 'visa'),
-  ];
+  const ago = (d, h = 13) => { const t = new Date(now - d * DAY); t.setHours(h, 0, 0, 0); return Math.min(t.getTime(), now); };
+  const E = (id, d, amount, category, note = '', extra = {}) => ({ id, date: ago(d), amount, category, note, createdAt: ago(d), ...extra });
   return {
-    meta: { profile: { name: 'Alex', payday: 'last', savingsGoal: 100000,
-      budgets: { 'Súper': 150000, Comida: 50000, Salidas: 40000, Transporte: 30000, Varios: 30000 } } },
-    cards: byId(cards),
+    meta: { profile: { name: 'Alex' } },
     incomes: byId([
-      { id: 'sueldo', name: 'Sueldo', amount: 950000, currency: 'ARS', icon: '💼', createdAt: since },
-      { id: 'free', name: 'Freelance', amount: 200, currency: 'USD', icon: '💻', createdAt: since },
+      { id: 's1', kind: 'salary', amount: 920000, date: ago(42, 10), note: '', createdAt: ago(42) },
+      { id: 's2', kind: 'salary', amount: 950000, date: ago(12, 10), note: '', createdAt: ago(12) },
+      { id: 'x1', kind: 'extra', amount: 60000, date: ago(5), note: 'Venta de la bici', createdAt: ago(5) },
     ]),
-    receipts: byId([{ id: `sueldo_${K}`, incomeId: 'sueldo', period: K, amount: 950000 }]),
     fixed: byId([
-      { id: 'alq', name: 'Alquiler', icon: '🏠', amount: 320000, currency: 'ARS', dueDay: dayIn(2), method: 'cash', category: 'Vivienda', createdAt: since },
-      { id: 'exp', name: 'Expensas', icon: '🏢', amount: 65000, currency: 'ARS', dueDay: dayIn(2), method: 'cash', category: 'Vivienda', createdAt: since },
-      { id: 'int', name: 'Internet', icon: '🌐', amount: 28000, currency: 'ARS', dueDay: dayIn(5), method: 'debit', category: 'Servicios', createdAt: since },
-      { id: 'luz', name: 'Luz', icon: '💡', amount: 22000, currency: 'ARS', dueDay: dayIn(-4), method: 'debit', category: 'Servicios', createdAt: since },
-      { id: 'nfx', name: 'Netflix', icon: '🎬', amount: 10, currency: 'USD', dueDay: 12, method: 'visa', category: 'Suscripciones', createdAt: since },
-      { id: 'spt', name: 'Spotify', icon: '🎵', amount: 4500, currency: 'ARS', dueDay: 20, method: 'visa', category: 'Suscripciones', createdAt: since },
+      { id: 'alq', name: 'Alquiler', icon: '🏠', amount: 320000, createdAt: 1 },
+      { id: 'luz', name: 'Luz', icon: '💡', amount: 22000, createdAt: 2 },
+      { id: 'int', name: 'Internet', icon: '🌐', amount: 28000, createdAt: 3 },
+      { id: 'gym', name: 'Gimnasio', icon: '🏋️', amount: 35000, createdAt: 4 },
+      { id: 'nfx', name: 'Netflix', icon: '🎬', amount: 10, currency: 'USD', createdAt: 5 },
     ]),
-    installments: byId([
-      { id: 'nike', name: 'Zapatillas Nike', icon: '👟', amountPer: 25000, total: 6, startPeriod: addMonths(K, -2), method: 'visa', currency: 'ARS' },
-      { id: 'cel', name: 'Celular Samsung', icon: '📱', amountPer: 45000, total: 12, startPeriod: addMonths(K, -3), method: 'master', currency: 'ARS' },
-      { id: 'hel', name: 'Heladera', icon: '🧊', amountPer: 80000, total: 3, startPeriod: K, method: 'cash', dueDay: dayIn(-3), currency: 'ARS' },
-      { id: 'tv', name: 'Smart TV', icon: '📺', amountPer: 30000, total: 6, startPeriod: addMonths(K, -6), method: 'visa', currency: 'ARS' },
-    ]),
-    expenses: byId(expenses),
-    payments: byId(['card_visa', 'card_master', 'fixed_luz', 'inst_hel'].map((x) => ({ id: `${x}_${K}`, at: now }))),
-    savings: byId([
-      { id: 's1', period: addMonths(K, -3), amount: 100000 }, { id: 's2', period: addMonths(K, -2), amount: 120000 },
-      { id: 's3', period: addMonths(K, -1), amount: 100000 }, { id: 's4', period: K, amount: 100000 },
+    expenses: byId([
+      E('f1', 11, 320000, 'Pagos fijos', 'Alquiler', { fixedId: 'alq' }), E('f2', 9, 21500, 'Pagos fijos', 'Luz', { fixedId: 'luz' }),
+      E('e1', 0, 23500, 'Súper', 'Coto'), E('e2', 1, 8500, 'Comida', 'Almuerzo'), E('e3', 2, 18000, 'Salidas', 'Cerveza con amigos'),
+      E('e4', 3, 4200, 'Transporte', 'SUBE'), E('e5', 4, 31000, 'Súper', 'Carrefour'), E('e6', 6, 15000, 'Salidas', 'Cine'),
+      E('e7', 8, 42000, 'Ropa', 'Remera'), E('e8', 10, 9800, 'Salud', 'Farmacia'), E('u1', 7, 12, 'Varios', 'App Store', { currency: 'USD', rate: 1480, rateType: 'tarjeta' }),
+      E('o1', 40, 320000, 'Pagos fijos', 'Alquiler', { fixedId: 'alq' }), E('o2', 30, 61000, 'Súper'), E('o3', 25, 35000, 'Salidas', 'Cumple'),
+      E('o4', 20, 22000, 'Comida', 'Pedidos'), E('o5', 15, 54000, 'Hogar', 'Sábanas'),
     ]),
   };
 }

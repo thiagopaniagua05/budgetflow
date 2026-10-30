@@ -3,6 +3,9 @@ import App from './App.jsx';
 import { createDemoStore } from './store/demo.js';
 import { createFirebaseStore } from './store/firebase.js';
 import './styles.css';
+import { applyTheme } from './theme.js';
+
+applyTheme();
 
 const root = createRoot(document.getElementById('root'));
 async function start() {

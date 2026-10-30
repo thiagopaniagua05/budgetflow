@@ -1,96 +1,114 @@
 import { useState } from 'react';
-import * as F from '../finance.js';
-import { CATEGORIES, Seg, Confirm, parseNum, downloadFile, Icon } from '../components.jsx';
+import { money, usd } from '../month.js';
+import { Confirm, Sheet, Seg, parseNum } from '../components.jsx';
+import { getTheme, setTheme } from '../theme.js';
+import { RATE_TYPES } from '../rates.js';
 
-export default function Settings({ ctx, autoRates, refreshRates }) {
-  const { data, store, user, rates, k } = ctx;
+const ICONS = ['🏠', '🏢', '💡', '🔥', '💧', '🌐', '📱', '🎬', '🎵', '🏋️', '🚗', '🎓', '🛡️', '📌'];
+
+export default function Settings({ ctx }) {
+  const { data, store, user, toast } = ctx;
   const p = data.profile || {};
   const [name, setName] = useState(p.name || '');
-  const [paydayMode, setPaydayMode] = useState(p.payday && p.payday !== 'last' ? 'day' : 'last');
-  const [payday, setPayday] = useState(p.payday && p.payday !== 'last' ? String(p.payday) : '1');
-  const [goal, setGoal] = useState(p.savingsGoal ? String(p.savingsGoal) : '');
-  const [budgets, setBudgets] = useState(() => Object.fromEntries(CATEGORIES.map((c) => [c.name, p.budgets?.[c.name] ? String(p.budgets[c.name]) : ''])));
-  const [manual, setManual] = useState(!!p.rates?.manual);
-  const [tarjeta, setTarjeta] = useState(String(p.rates?.tarjeta || autoRates?.tarjeta || ''));
-  const [mep, setMep] = useState(String(p.rates?.mep || autoRates?.mep || ''));
+  const [edit, setEdit] = useState(null); // pago fijo que se está editando ({} = nuevo)
   const [logout, setLogout] = useState(false);
-
-  const save = async () => {
-    await store.set('meta', 'profile', {
-      ...p, name: name.trim() || p.name, payday: paydayMode === 'last' ? 'last' : Math.min(31, Math.max(1, parseInt(payday, 10) || 1)),
-      savingsGoal: parseNum(goal),
-      budgets: Object.fromEntries(Object.entries(budgets).map(([c, v]) => [c, parseNum(v)]).filter(([, v]) => v > 0)),
-      rates: { manual, tarjeta: parseNum(tarjeta), mep: parseNum(mep) },
-    });
-    ctx.toast('✅ Ajustes guardados');
-  };
+  const [theme, setThemeState] = useState(getTheme());
+  const { rates } = ctx;
+  const fixed = [...(data.fixed || [])].sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+  const total = fixed.reduce((a, f) => a + (f.currency === 'USD' ? (+f.amount || 0) * (rates?.tarjeta || 0) : +f.amount || 0), 0);
 
   return (
     <>
-      <div className="row"><button className="icon-btn" onClick={() => ctx.go('home')} aria-label="Volver"><Icon.back /></button><div className="page-title">Ajustes</div></div>
+      <div className="page-title">Ajustes</div>
+
+      <section className="card">
+        <div className="card-h">
+          <div className="card-t">📌 Pagos fijos</div>
+          {fixed.length > 0 && <span className="pill">{money(total)} / mes</span>}
+        </div>
+        <div className="hint" style={{ marginTop: 0, marginBottom: 6 }}>Lo que pagás todos los meses. En Inicio los vas tildando a medida que los pagás.</div>
+        {fixed.map((f) => (
+          <button key={f.id} className="item" onClick={() => setEdit(f)}>
+            <div className="ic">{f.icon || '📌'}</div>
+            <div className="grow t ellipsis">{f.name}</div>
+            <div className="amt money">{f.currency === 'USD' ? usd(f.amount) : money(f.amount)}</div>
+          </button>
+        ))}
+        <button className="btn block" style={{ marginTop: 10 }} onClick={() => setEdit({})}>+ Agregar pago fijo</button>
+      </section>
+
+      <section className="card">
+        <div className="card-t">🎨 Apariencia</div>
+        <div className="field">
+          <Seg value={theme} onChange={(t) => { setThemeState(t); setTheme(t); }} options={[['auto', '📱 Auto'], ['light', '☀️ Claro'], ['dark', '🌙 Oscuro']]} />
+        </div>
+        <div className="hint">Automático usa el mismo modo que tu celular.</div>
+      </section>
+
+      <section className="card">
+        <div className="card-h">
+          <div className="card-t">💵 Dólar hoy</div>
+          <button className="link" onClick={ctx.refreshRates}>Actualizar</button>
+        </div>
+        {rates ? (
+          <div className="rategrid">
+            {RATE_TYPES.map(([t, l]) => <div key={t}><span>{l}</span><b className="money">{money(rates[t])}</b></div>)}
+          </div>
+        ) : <div className="hint" style={{ marginTop: 0 }}>No se pudo traer la cotización. Revisá tu conexión.</div>}
+        {rates?.at && <div className="hint">Actualizado {new Date(rates.at).toLocaleString('es-AR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })} · fuente: dolarapi.com</div>}
+      </section>
 
       <section className="card">
         <div className="card-t">👤 Cuenta</div>
-        <div className="field"><label className="label">Tu nombre</label><input className="input" value={name} onChange={(e) => setName(e.target.value)} /></div>
-        <div className="hint">{user?.email} · tus datos son privados, nadie más los ve.</div>
-      </section>
-
-      <section className="card">
-        <div className="card-t">📅 Día de cobro</div>
-        <div className="field"><Seg value={paydayMode} onChange={setPaydayMode} options={[['last', 'Último día del mes'], ['day', 'Un día fijo']]} /></div>
-        {paydayMode === 'day' && <div className="field"><label className="label">Día</label><input className="input" inputMode="numeric" value={payday} onChange={(e) => setPayday(e.target.value)} /></div>}
-        <div className="hint">Cada "mes" de la app va de cobro a cobro.</div>
-      </section>
-
-      <section className="card">
-        <div className="card-t">🐷 Meta de ahorro mensual</div>
-        <div className="field"><input className="input" inputMode="decimal" placeholder="Ej: 100000" value={goal} onChange={(e) => setGoal(e.target.value)} /></div>
-        <div className="hint">Se descuenta del dinero libre apenas cobrás: primero ahorrás, después gastás.</div>
-      </section>
-
-      <section className="card">
-        <div className="card-t">📊 Presupuesto por categoría</div>
-        <div className="hint">Dejá vacío lo que no quieras controlar.</div>
-        {CATEGORIES.map((c) => (
-          <div key={c.name} className="row" style={{ marginTop: 10 }}>
-            <span className="grow">{c.icon} {c.name}</span>
-            <input className="input" style={{ width: 150 }} inputMode="decimal" placeholder="Sin límite" value={budgets[c.name]}
-              onChange={(e) => setBudgets({ ...budgets, [c.name]: e.target.value })} />
+        <div className="field"><label className="label">Tu nombre</label>
+          <div className="row">
+            <input className="input grow" value={name} aria-label="Tu nombre" onChange={(e) => setName(e.target.value)} />
+            {name.trim() && name.trim() !== p.name && <button className="btn small primary" onClick={async () => { await store.set('meta', 'profile', { ...p, name: name.trim() }); toast('✅ Guardado'); }}>Guardar</button>}
           </div>
-        ))}
-      </section>
-
-      <section className="card">
-        <div className="card-t">💵 Dólar</div>
-        <div className="hint">
-          Automático (dolarapi.com): tarjeta {autoRates?.tarjeta ? F.money(autoRates.tarjeta) : '—'} · MEP {autoRates?.mep ? F.money(autoRates.mep) : '—'}
-          {autoRates?.at ? ` · actualizado ${new Date(autoRates.at).toLocaleString('es-AR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}` : ''}
-          {' '}<button className="link" onClick={refreshRates}>Actualizar</button>
         </div>
-        <div className="row field"><div className="grow"><b>Usar cotización manual</b></div><button type="button" className={'switch' + (manual ? ' on' : '')} onClick={() => setManual(!manual)} aria-label="Manual" /></div>
-        {manual && (
-          <div className="grid2">
-            <div className="field"><label className="label">Dólar tarjeta</label><input className="input" inputMode="decimal" value={tarjeta} onChange={(e) => setTarjeta(e.target.value)} /></div>
-            <div className="field"><label className="label">Dólar MEP</label><input className="input" inputMode="decimal" value={mep} onChange={(e) => setMep(e.target.value)} /></div>
-          </div>
-        )}
-        <div className="hint">Compras con tarjeta en USD → dólar tarjeta. Ingresos y gastos en USD sin tarjeta → MEP. En uso ahora: tarjeta {F.money(rates.tarjeta)} · MEP {F.money(rates.mep)}.</div>
+        <div className="hint">{user?.email} · tus datos son privados, nadie más los ve.</div>
+        <div className="row" style={{ marginTop: 14 }}>
+          {store.mode === 'demo' && <button className="btn grow" onClick={() => store.reset()}>Reiniciar demo</button>}
+          <button className="btn danger grow" onClick={() => setLogout(true)}>Cerrar sesión</button>
+        </div>
       </section>
 
-      <button className="btn primary block" style={{ marginTop: 16 }} onClick={save}>Guardar ajustes</button>
-
-      <section className="card">
-        <div className="card-t">🔔 Recordatorios en tu calendario</div>
-        <p className="hint">Descargá tus vencimientos (servicios, resúmenes y cuotas) y abrilos con el calendario del celular. Te avisa 3 días antes y el mismo día, aunque la app esté cerrada.</p>
-        <button className="btn block" onClick={() => downloadFile('budgetflow-vencimientos.ics', F.icsForDues(F.calendarItems(data, k, rates)))}>📅 Agregar vencimientos al calendario</button>
-        <div className="hint">Si después agregás servicios o cuotas nuevas, volvé a descargarlo.</div>
-      </section>
-
-      <div className="row" style={{ marginTop: 16 }}>
-        {store.mode === 'demo' && <button className="btn grow" onClick={() => store.reset()}>Reiniciar demo</button>}
-        <button className="btn danger grow" onClick={() => setLogout(true)}>Cerrar sesión</button>
-      </div>
-      {logout && <Confirm text="Vas a tener que volver a entrar con tu email y contraseña." okText="Cerrar sesión" onCancel={() => setLogout(false)} onOk={() => store.logout()} />}
+      {edit && <FixedSheet ctx={ctx} f={edit} onClose={() => setEdit(null)} />}
+      {logout && <Confirm text="Vas a tener que volver a poner tu email y contraseña." okText="Cerrar sesión" onCancel={() => setLogout(false)} onOk={() => store.logout()} />}
     </>
+  );
+}
+
+function FixedSheet({ ctx, f, onClose }) {
+  const { store, toast } = ctx;
+  const [name, setName] = useState(f.name || '');
+  const [amount, setAmount] = useState(f.amount ? String(f.amount) : '');
+  const [icon, setIcon] = useState(f.icon || '📌');
+  const [currency, setCurrency] = useState(f.currency || 'ARS');
+  const [del, setDel] = useState(false);
+  const save = async () => {
+    if (!name.trim() || !(parseNum(amount) > 0)) return;
+    await store.set('fixed', f.id || store.newId('fixed'), { name: name.trim(), amount: parseNum(amount), currency, icon, createdAt: f.createdAt || Date.now() });
+    toast('✅ Pago fijo guardado');
+    onClose();
+  };
+  return (
+    <Sheet title={f.id ? 'Editar pago fijo' : 'Nuevo pago fijo'} onClose={onClose}>
+      <div className="chips">{ICONS.map((i) => <button key={i} className={'chip' + (icon === i ? ' on' : '')} onClick={() => setIcon(i)}>{i}</button>)}</div>
+      <div className="field"><label className="label">Nombre</label><input className="input" placeholder="Ej: Alquiler, Luz, Internet" aria-label="Nombre del pago" value={name} onChange={(e) => setName(e.target.value)} /></div>
+      <div className="field"><label className="label">Monto aproximado</label>
+        <div className="row">
+          <input className="input grow" inputMode="decimal" placeholder={currency === 'USD' ? 'US$' : '$'} aria-label="Monto del pago" value={amount} onChange={(e) => setAmount(e.target.value.replace(/[^\d.,]/g, ''))} />
+          <div style={{ width: 150 }}><Seg value={currency} onChange={setCurrency} options={[['ARS', '$'], ['USD', 'US$']]} /></div>
+        </div>
+      </div>
+      <div className="hint">Cuando lo pagues podés corregir el monto real.</div>
+      <div className="row" style={{ marginTop: 16 }}>
+        {f.id && <button className="btn danger" onClick={() => setDel(true)}>Borrar</button>}
+        <button className="btn primary grow" disabled={!name.trim() || !(parseNum(amount) > 0)} onClick={save}>Guardar</button>
+      </div>
+      {del && <Confirm text={`Se borra "${f.name}" de tus pagos fijos. Lo que ya pagaste queda anotado.`} okText="Borrar" onCancel={() => setDel(false)}
+        onOk={async () => { await store.remove('fixed', f.id); onClose(); }} />}
+    </Sheet>
   );
 }

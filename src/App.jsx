@@ -1,31 +1,28 @@
 import { useEffect, useMemo, useState } from 'react';
-import * as F from './finance.js';
-import { fetchRates, effectiveRates } from './rates.js';
-import { Icon, Sheet, parseNum } from './components.jsx';
+import { periods, inPeriod } from './month.js';
+import { fetchRates } from './rates.js';
+import { Icon, Sheet, parseNum, toDateInput } from './components.jsx';
 import { authErrorText } from './store/firebase.js';
 import Home from './screens/Home.jsx';
-import QuickAdd from './screens/QuickAdd.jsx';
-import Movements from './screens/Movements.jsx';
-import Plans from './screens/Plans.jsx';
-import Analysis from './screens/Analysis.jsx';
+import Expenses from './screens/Expenses.jsx';
 import Settings from './screens/Settings.jsx';
+import Add from './screens/Add.jsx';
 
-const COLS = ['incomes', 'receipts', 'fixed', 'installments', 'cards', 'expenses', 'payments', 'savings'];
+const COLS = ['incomes', 'expenses', 'fixed'];
+const EMPTY = { loaded: {} };
 
 export default function App({ store }) {
   const [user, setUser] = useState(undefined);
-  const [data, setData] = useState({ loaded: {} });
+  const [data, setData] = useState(EMPTY);
   const [tab, setTab] = useState('home');
-  const [plansTab, setPlansTab] = useState('fijos');
   const [sheet, setSheet] = useState(null);
   const [toastMsg, setToastMsg] = useState(null);
-  const [now, setNow] = useState(Date.now());
-  const [k, setK] = useState(null);
-  const [autoRates, setAutoRates] = useState(null);
+  const [sel, setSel] = useState(null); // id del mes elegido (null = el actual)
+  const [rates, setRates] = useState(null);
+  useEffect(() => { fetchRates().then(setRates); }, []);
 
-  useEffect(() => store.onAuth((u) => { setUser(u); setData({ loaded: {} }); setK(null); setTab('home'); setSheet(null); }), [store]);
-  useEffect(() => { const t = setInterval(() => setNow(Date.now()), 60000); return () => clearInterval(t); }, []);
-  useEffect(() => { fetchRates().then(setAutoRates); }, []);
+  // Al cambiar de usuario se limpia todo: nunca se ven datos de otra cuenta.
+  useEffect(() => store.onAuth((u) => { setUser(u); setData(EMPTY); setSel(null); setTab('home'); setSheet(null); }), [store]);
   useEffect(() => {
     if (!user) return;
     const unsubs = COLS.map((c) => store.subscribe(c, (rows) => setData((d) => ({ ...d, [c]: rows, loaded: { ...d.loaded, [c]: true } }))));
@@ -33,43 +30,45 @@ export default function App({ store }) {
     return () => unsubs.forEach((u) => u && u());
   }, [user, store]);
 
+  const ps = useMemo(() => periods(data), [data]);
   const toast = (m) => { setToastMsg(m); clearTimeout(toast.t); toast.t = setTimeout(() => setToastMsg(null), 3200); };
-  const rates = useMemo(() => effectiveRates(autoRates, data.profile), [autoRates, data.profile]);
 
   if (user === undefined) return <div className="splash"><div className="spinner" /></div>;
   if (!user) return <Login store={store} />;
-  const ready = data.loaded.profile && data.loaded.expenses && data.loaded.incomes;
+  const ready = COLS.every((c) => data.loaded[c]) && data.loaded.profile;
   if (!ready) return <div className="splash"><div className="spinner" /></div>;
   if (!data.profile) return <Welcome store={store} />;
 
-  const payday = data.profile.payday || 'last';
-  const period = k || F.periodOf(now, payday);
+  const now = Date.now();
+  const current = [...ps].reverse().find((p) => inPeriod(p, now)) || ps[ps.length - 1];
+  const idx = Math.max(0, ps.findIndex((p) => p.id === (sel || current.id)));
+  const period = ps[idx];
   const go = (t) => { setTab(t); window.scrollTo(0, 0); };
   const ctx = {
-    store, data, rates, now, user, toast, go, k: period, setK,
-    openQuickAdd: (editing) => setSheet({ type: 'add', editing }),
-    openPlans: (t) => { setPlansTab(t); go('plans'); },
+    store, data, user, toast, go, period, rates,
+    refreshRates: () => fetchRates(true).then((r) => { setRates(r); toast(r ? '💵 Dólar actualizado' : 'No se pudo actualizar el dólar'); }),
+    isCurrent: period.id === current.id,
+    prev: idx > 0 ? () => setSel(ps[idx - 1].id) : null,
+    next: idx < ps.length - 1 ? () => setSel(ps[idx + 1].id) : null,
+    openAdd: (opts = {}) => setSheet({ type: 'add', ...opts }),
   };
 
   return (
     <div className="app">
       {tab === 'home' && <Home ctx={ctx} />}
-      {tab === 'moves' && <Movements ctx={ctx} />}
-      {tab === 'plans' && <Plans ctx={ctx} tab={plansTab} setTab={setPlansTab} />}
-      {tab === 'analysis' && <Analysis ctx={ctx} />}
-      {tab === 'settings' && <Settings ctx={ctx} autoRates={autoRates} refreshRates={() => fetchRates(true).then((r) => { setAutoRates(r); toast(r ? '💵 Dólar actualizado' : 'No se pudo actualizar el dólar'); })} />}
+      {tab === 'moves' && <Expenses ctx={ctx} />}
+      {tab === 'settings' && <Settings ctx={ctx} />}
 
-      {tab !== 'settings' && <button className="fab" onClick={() => setSheet({ type: 'add' })} aria-label="Registrar gasto"><Icon.plus /></button>}
+      {tab !== 'settings' && <button className="fab" onClick={() => ctx.openAdd()} aria-label="Anotar"><Icon.plus /></button>}
       <nav className="nav">
         <button className={'tab' + (tab === 'home' ? ' on' : '')} onClick={() => go('home')}><Icon.home />Inicio</button>
-        <button className={'tab' + (tab === 'moves' ? ' on' : '')} onClick={() => go('moves')}><Icon.list />Movimientos</button>
-        <button className={'tab' + (tab === 'plans' ? ' on' : '')} onClick={() => go('plans')}><Icon.card />Fijos y cuotas</button>
-        <button className={'tab' + (tab === 'analysis' ? ' on' : '')} onClick={() => go('analysis')}><Icon.chart />Análisis</button>
+        <button className={'tab' + (tab === 'moves' ? ' on' : '')} onClick={() => go('moves')}><Icon.list />Gastos</button>
+        <button className={'tab' + (tab === 'settings' ? ' on' : '')} onClick={() => go('settings')}><Icon.gear />Ajustes</button>
       </nav>
 
       {sheet?.type === 'add' && (
-        <Sheet title={sheet.editing ? 'Editar movimiento' : 'Nuevo movimiento'} onClose={() => setSheet(null)}>
-          <QuickAdd ctx={ctx} editing={sheet.editing} onDone={() => setSheet(null)} />
+        <Sheet title={sheet.editing ? 'Editar' : sheet.fixed ? `Pagar ${sheet.fixed.name}` : 'Anotar'} onClose={() => setSheet(null)}>
+          <Add ctx={ctx} editing={sheet.editing} fixed={sheet.fixed} kind={sheet.kind} onDone={() => { setSheet(null); setSel(null); }} />
         </Sheet>
       )}
       {toastMsg && <div className="toast">{toastMsg}</div>}
@@ -94,7 +93,7 @@ function Login({ store }) {
     <form className="login" onSubmit={submit}>
       <div className="logo-big">💸</div>
       <h1>BudgetFlow</h1>
-      <p>Sabé siempre cuánta plata libre tenés</p>
+      <p>Cuánto gastaste y cuánto te queda</p>
       <div style={{ display: 'grid', gap: 10 }}>
         <input className="input" type="email" placeholder="Email" aria-label="Email" autoComplete="username" value={email} onChange={(e) => setEmail(e.target.value)} />
         <input className="input" type="password" placeholder="Contraseña" aria-label="Contraseña" autoComplete="current-password" value={pass} onChange={(e) => setPass(e.target.value)} />
@@ -109,23 +108,27 @@ function Login({ store }) {
 function Welcome({ store }) {
   const [name, setName] = useState('');
   const [salary, setSalary] = useState('');
-  const [goal, setGoal] = useState('');
+  const [date, setDate] = useState(toDateInput(Date.now()));
   const start = async () => {
     const now = Date.now();
-    const k = F.periodOf(now, 'last');
-    if (parseNum(salary) > 0) await store.set('incomes', store.newId('incomes'), { name: 'Sueldo', icon: '💼', amount: parseNum(salary), currency: 'ARS', fromPeriod: k, createdAt: now });
-    await store.set('meta', 'profile', { name: name.trim(), payday: 'last', savingsGoal: parseNum(goal), budgets: {}, createdAt: now });
+    if (parseNum(salary) > 0) {
+      const d = new Date(date + 'T12:00').getTime();
+      await store.set('incomes', store.newId('incomes'), { kind: 'salary', amount: parseNum(salary), date: d, note: '', createdAt: now });
+    }
+    await store.set('meta', 'profile', { name: name.trim(), createdAt: now });
   };
   return (
     <div className="login">
       <div className="logo-big">👋</div>
       <h1>¡Bienvenido!</h1>
-      <p>Tres datos y arrancamos. Todo se puede cambiar después.</p>
+      <p>Anotá tu último sueldo y arrancamos.</p>
       <div style={{ display: 'grid', gap: 10 }}>
         <input className="input" placeholder="Tu nombre" aria-label="Nombre" value={name} onChange={(e) => setName(e.target.value)} />
-        <input className="input" inputMode="decimal" placeholder="Sueldo mensual aproximado" aria-label="Sueldo" value={salary} onChange={(e) => setSalary(e.target.value)} />
-        <input className="input" inputMode="decimal" placeholder="Meta de ahorro por mes (opcional)" aria-label="Meta de ahorro" value={goal} onChange={(e) => setGoal(e.target.value)} />
-        <div className="hint" style={{ textAlign: 'center' }}>Cobrás el último día de cada mes (se cambia en Ajustes).</div>
+        <input className="input" inputMode="decimal" placeholder="Último sueldo cobrado (opcional)" aria-label="Sueldo" value={salary} onChange={(e) => setSalary(e.target.value.replace(/[^\d.,]/g, ''))} />
+        {parseNum(salary) > 0 && <>
+          <label className="label" style={{ marginBottom: -4 }}>¿Qué día lo cobraste?</label>
+          <input className="input" type="date" aria-label="Fecha del sueldo" value={date} onChange={(e) => setDate(e.target.value)} />
+        </>}
         <button className="btn primary block" disabled={!name.trim()} onClick={start}>Empezar</button>
       </div>
     </div>

@@ -22,14 +22,19 @@ export async function createFirebaseStore(config) {
     db = fsM.getFirestore(app);
   }
   // Cada usuario tiene sus datos en users/{uid}/… y nadie ve los del otro
+  // La versión 2 (simple) guarda en colecciones nuevas (v2_…), así nunca se mezcla con lo viejo.
   let uid = null;
-  const path = (col) => `users/${uid}/${col}`;
+  const path = (col) => `users/${uid}/v2_${col}`;
   const ref = (col, id) => fsM.doc(db, path(col), id);
 
   return {
     mode: 'firebase',
     onAuth(cb) {
-      return authM.onAuthStateChanged(auth, (u) => { uid = u?.uid || null; cb(u ? { uid: u.uid, email: u.email } : null); });
+      return authM.onAuthStateChanged(auth, (u) => {
+        uid = u?.uid || null;
+        if (u) wipeOldVersion(fsM, db, u.uid).catch((e) => console.warn('limpieza', e));
+        cb(u ? { uid: u.uid, email: u.email } : null);
+      });
     },
     async login(email, pass) { await authM.signInWithEmailAndPassword(auth, email.trim(), pass); },
     logout() { return authM.signOut(auth); },
@@ -52,6 +57,19 @@ export async function createFirebaseStore(config) {
       return s.exists() ? { id: s.id, ...s.data() } : null;
     },
   };
+}
+
+// Borra (una sola vez por cuenta) todo lo anotado con la versión anterior de la app.
+// Si se corta a mitad, se retoma la próxima vez que entrás.
+const OLD = ['incomes', 'receipts', 'fixed', 'installments', 'cards', 'expenses', 'payments', 'savings', 'meta'];
+async function wipeOldVersion(fsM, db, uid) {
+  const flag = fsM.doc(db, `users/${uid}/v2_meta`, 'cleanup');
+  if ((await fsM.getDocFromServer(flag)).exists()) return;
+  for (const col of OLD) {
+    const snap = await fsM.getDocsFromServer(fsM.collection(db, `users/${uid}/${col}`));
+    for (const d of snap.docs) await fsM.deleteDoc(fsM.doc(db, `users/${uid}/${col}`, d.id));
+  }
+  await fsM.setDoc(flag, { at: Date.now() });
 }
 
 export function authErrorText(e) {

@@ -1,8 +1,10 @@
-// Cotización del dólar desde dolarapi.com (gratis, sin clave). Se guarda en el navegador por 6 horas.
-const KEY = 'budgetflow-rates';
-const TTL = 6 * 3600e3;
+// Cotización del dólar desde dolarapi.com (gratis, sin clave). Se guarda en el navegador por 3 horas.
+const KEY = 'budgetflow-rates-v2';
+const TTL = 3 * 3600e3;
 const read = () => { try { return JSON.parse(localStorage.getItem(KEY)); } catch { return null; } };
 const write = (v) => { try { localStorage.setItem(KEY, JSON.stringify(v)); } catch { /* sin storage */ } };
+
+export const RATE_TYPES = [['tarjeta', '💳 Tarjeta'], ['mep', '📈 MEP'], ['blue', '💵 Blue'], ['oficial', '🏦 Oficial']];
 
 export async function fetchRates(force = false) {
   const cached = read();
@@ -13,8 +15,8 @@ export async function fetchRates(force = false) {
       if (!r.ok) throw new Error(casa);
       return (await r.json()).venta;
     };
-    const [tarjeta, mep, oficial] = await Promise.all([get('tarjeta'), get('bolsa'), get('oficial')]);
-    const v = { tarjeta, mep, oficial, at: Date.now() };
+    const [tarjeta, mep, blue, oficial] = await Promise.all([get('tarjeta'), get('bolsa'), get('blue'), get('oficial')]);
+    const v = { tarjeta, mep, blue, oficial, at: Date.now() };
     write(v);
     return v;
   } catch (e) {
@@ -23,9 +25,6 @@ export async function fetchRates(force = false) {
   }
 }
 
-/** Cotización efectiva: la manual (si está activada) o la automática. */
-export function effectiveRates(auto, profile) {
-  const m = profile?.rates;
-  if (m?.manual) return { tarjeta: +m.tarjeta || 0, mep: +m.mep || 0, manual: true };
-  return { tarjeta: auto?.tarjeta || +m?.tarjeta || 0, mep: auto?.mep || +m?.mep || 0, at: auto?.at, manual: false };
-}
+/** Último tipo de dólar que usaste (se recuerda en este dispositivo). */
+export const lastRateType = () => { try { return localStorage.getItem('budgetflow-ratetype') || 'tarjeta'; } catch { return 'tarjeta'; } };
+export const saveRateType = (t) => { try { localStorage.setItem('budgetflow-ratetype', t); } catch { /* */ } };

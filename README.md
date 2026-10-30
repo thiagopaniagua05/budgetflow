@@ -1,15 +1,16 @@
 # 💸 BudgetFlow
 
-PWA de finanzas personales: ingresos, gastos fijos, cuotas, tarjetas de crédito con cierre y vencimiento, ahorro y presupuestos por categoría. Cada usuario ve solo sus propios datos.
+PWA simple de finanzas personales: cuánto cobraste, cuánto gastaste y cuánto te queda en el mes. Cada usuario ve solo sus propios datos.
 
 ## Funcionalidades
 
-- Disponible del período y gasto diario sugerido
-- Tarjetas de crédito con fecha de cierre y vencimiento reales
-- Cuotas, gastos fijos e ingresos esperados vs. confirmados
-- Pesos y dólares (cotización automática)
-- Presupuestos por categoría, meta de ahorro e historial
-- Recordatorios de vencimientos al calendario (.ics)
+- El mes arranca el día que cobrás el sueldo y dura hasta el próximo cobro
+- Inicio: sueldo, gastado y cuánto te queda
+- Pagos fijos del mes (alquiler, luz, internet…) con botón de "Pagar"
+- Gastos por categoría y por día, con meses anteriores
+- Ingresos extra
+- Gastos, ingresos y pagos fijos en dólares (cotización automática: tarjeta, MEP, blue u oficial)
+- Modo claro, oscuro o automático
 - Datos aislados por usuario (`users/{uid}/...`)
 
 ## Requisitos
