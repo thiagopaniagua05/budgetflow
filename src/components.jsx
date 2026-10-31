@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 
 export const CATEGORIES = [
   { name: 'Súper', icon: '🛒', color: '#10b981' }, { name: 'Comida', icon: '🍔', color: '#34d399' },
@@ -20,6 +20,7 @@ export const Icon = {
   back: I(<path d="M15 6l-6 6 6 6" />),
   next: I(<path d="M9 6l6 6-6 6" />),
   trash: I(<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3" />),
+  chev: I(<path d="M6 9l6 6 6-6" />),
   check: I(<path d="M5 12l5 5L20 7" />, 2.6),
 };
 
@@ -69,3 +70,36 @@ export const toDateInput = (ts) => {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
 };
 export const parseNum = (v) => { const n = parseFloat(String(v).replace(/\./g, '').replace(',', '.')); return Number.isFinite(n) ? n : 0; };
+
+/**
+ * Formatea un monto mientras se escribe: 130000 → 130.000 (coma para decimales: 9,99).
+ * Si el teclado solo tiene punto, el punto recién tipeado se toma como coma decimal.
+ */
+export function fmtInput(raw, prev = '') {
+  let s = String(raw ?? '');
+  if (s === prev + '.') s = prev + ',';
+  s = s.replace(/[^\d,]/g, '');
+  const i = s.indexOf(',');
+  const int = (i >= 0 ? s.slice(0, i) : s).replace(/^0+(?=\d)/, '');
+  const dec = i >= 0 ? s.slice(i + 1).replace(/,/g, '').slice(0, 2) : null;
+  const g = int.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  return dec === null ? g : `${g || '0'},${dec}`;
+}
+/** Número guardado → texto para el campo (1530.5 → "1.530,5"). */
+export const numToInput = (n) => (+n ? fmtInput(String(+n).replace('.', ',')) : '');
+
+/** Sección que se despliega con una animación suave. */
+export function Fold({ icon, title, right, children, defaultOpen = false, className = '' }) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <section className={'card foldcard ' + className + (open ? ' is-open' : '')}>
+      <button className="fold-head" onClick={() => setOpen(!open)} aria-expanded={open}>
+        <span className="fold-ic">{icon}</span>
+        <span className="grow fold-t">{title}</span>
+        {right}
+        <Icon.chev className="chev" />
+      </button>
+      <div className={'fold' + (open ? ' open' : '')}><div><div className="fold-body">{children}</div></div></div>
+    </section>
+  );
+}

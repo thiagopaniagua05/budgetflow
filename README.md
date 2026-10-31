@@ -5,11 +5,13 @@ PWA simple de finanzas personales: cuánto cobraste, cuánto gastaste y cuánto 
 ## Funcionalidades
 
 - El mes arranca el día que cobrás el sueldo y dura hasta el próximo cobro
-- Inicio: sueldo, gastado y cuánto te queda
+- Inicio compacto: cuánto te queda, cobrado / gastado / ahorrado y comparación con el mes anterior
 - Pagos fijos del mes (alquiler, luz, internet…) con botón de "Pagar"
-- Gastos por categoría y por día, con meses anteriores
-- Ingresos extra
-- Gastos, ingresos y pagos fijos en dólares (cotización automática: tarjeta, MEP, blue u oficial)
+- Gastos por categoría y por día; historial de meses con lo que sobró en cada uno
+- Ahorros en pesos y dólares (guardar lo que sobró de un mes con un toque)
+- Gastos rápidos: los que se repiten se cargan con un toque
+- Pesos y dólares (cotización automática: tarjeta, MEP, blue u oficial)
+- Copia de seguridad en CSV (se abre con Excel o Google Sheets)
 - Modo claro, oscuro o automático
 - Datos aislados por usuario (`users/{uid}/...`)
 

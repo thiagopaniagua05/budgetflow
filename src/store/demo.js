@@ -1,5 +1,5 @@
 // Modo demo: datos de ejemplo guardados solo en este navegador.
-const KEY = 'budgetflow-demo-v4';
+const KEY = 'budgetflow-demo-v5';
 let mem = null;
 const read = () => { try { const s = localStorage.getItem(KEY); return s ? JSON.parse(s) : mem; } catch { return mem; } };
 const write = (db) => { mem = db; try { localStorage.setItem(KEY, JSON.stringify(db)); } catch { /* sin storage */ } };
@@ -24,6 +24,10 @@ function demoData() {
       { id: 'gym', name: 'Gimnasio', icon: '🏋️', amount: 35000, createdAt: 4 },
       { id: 'nfx', name: 'Netflix', icon: '🎬', amount: 10, currency: 'USD', createdAt: 5 },
     ]),
+    savings: byId([
+      { id: 'sv1', kind: 'in', amount: 150000, currency: 'ARS', note: 'Cuenta remunerada', date: ago(13, 9), createdAt: ago(13) },
+      { id: 'sv2', kind: 'in', amount: 100, currency: 'USD', rate: 1210, rateType: 'mep', note: 'Dólares', date: ago(10), createdAt: ago(10) },
+    ]),
     expenses: byId([
       E('f1', 11, 320000, 'Pagos fijos', 'Alquiler', { fixedId: 'alq' }), E('f2', 9, 21500, 'Pagos fijos', 'Luz', { fixedId: 'luz' }),
       E('e1', 0, 23500, 'Súper', 'Coto'), E('e2', 1, 8500, 'Comida', 'Almuerzo'), E('e3', 2, 18000, 'Salidas', 'Cerveza con amigos'),
@@ -31,6 +35,7 @@ function demoData() {
       E('e7', 8, 42000, 'Ropa', 'Remera'), E('e8', 10, 9800, 'Salud', 'Farmacia'), E('u1', 7, 12, 'Varios', 'App Store', { currency: 'USD', rate: 1480, rateType: 'tarjeta' }),
       E('o1', 40, 320000, 'Pagos fijos', 'Alquiler', { fixedId: 'alq' }), E('o2', 30, 61000, 'Súper'), E('o3', 25, 35000, 'Salidas', 'Cumple'),
       E('o4', 20, 22000, 'Comida', 'Pedidos'), E('o5', 15, 54000, 'Hogar', 'Sábanas'),
+      E('o6', 22, 25000, 'Súper', 'Coto'), E('o7', 18, 4200, 'Transporte', 'SUBE'), E('o8', 27, 9000, 'Comida', 'Almuerzo'),
     ]),
   };
 }

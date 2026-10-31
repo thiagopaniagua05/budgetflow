@@ -69,5 +69,50 @@ export function summary(data, p, rates) {
   const byCat = {};
   for (const e of expenses) byCat[e.category || 'Varios'] = (byCat[e.category || 'Varios'] || 0) + ars(e);
   const cats = Object.entries(byCat).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);
-  return { expenses, extras, salary, extra, income, spent, spentUsd, left: income - spent, fixed, pending, cats };
+  // Lo que pasaste a ahorros sale de lo que te queda (y si sacaste, vuelve)
+  const savingsMoves = (data.savings || []).filter((x) => inPeriod(p, x.date));
+  const saved = savingsMoves.reduce((a, x) => a + (x.kind === 'out' ? -ars(x) : ars(x)), 0);
+  return { expenses, extras, salary, extra, income, spent, spentUsd, saved, left: income - spent - saved, fixed, pending, cats };
+}
+
+/** Total ahorrado, separado en pesos y dólares. */
+export function savingsTotals(data) {
+  const t = { ARS: 0, USD: 0 };
+  for (const x of data.savings || []) t[x.currency === 'USD' ? 'USD' : 'ARS'] += (x.kind === 'out' ? -1 : 1) * (+x.amount || 0);
+  return t;
+}
+
+/**
+ * Comparación con el mes anterior. En el mes actual compara "a esta altura"
+ * (los mismos días desde el cobro), así no da siempre "gastaste menos".
+ */
+export function compare(data, ps, idx, now = Date.now()) {
+  const p = ps[idx], prev = ps[idx - 1];
+  if (!p || !prev || !p.salary || !prev.salary) return null;
+  const sameDays = p.end === Infinity;
+  const cut = sameDays ? prev.start + (Math.min(now, p.end) - p.start) : Infinity;
+  const spentIn = (q, until) => (data.expenses || []).filter((e) => inPeriod(q, e.date) && e.date < until).reduce((a, e) => a + ars(e), 0);
+  const a = spentIn(p, Infinity), b = spentIn(prev, cut);
+  if (!(b > 0)) return null;
+  return { pct: Math.round(((a - b) / b) * 100), prevLabel: prev.label, sameDays };
+}
+
+/** Resumen de todos los meses, del más nuevo al más viejo. */
+export function history(data, ps, rates) {
+  return ps.filter((p) => p.salary).map((p) => ({ p, ...summary(data, p, rates) })).reverse();
+}
+
+/** Gastos que se repiten (misma nota y categoría, 2+ veces en los últimos 90 días): para cargarlos con un toque. */
+export function quickPicks(data, now = Date.now(), n = 6) {
+  const g = new Map();
+  for (const e of data.expenses || []) {
+    if (e.fixedId || !e.note?.trim() || now - e.date > 90 * DAY) continue;
+    const key = `${e.category}|${e.note.trim().toLowerCase()}`;
+    const it = g.get(key) || { count: 0, last: null };
+    it.count++;
+    if (!it.last || e.date > it.last.date) it.last = e;
+    g.set(key, it);
+  }
+  return [...g.values()].filter((x) => x.count >= 2)
+    .sort((a, b) => b.count - a.count || b.last.date - a.last.date).slice(0, n).map((x) => x.last);
 }

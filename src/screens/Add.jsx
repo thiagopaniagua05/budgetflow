@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import { money, usd, monthKeyFor, shiftKey, keyLabel } from '../month.js';
-import { RATE_TYPES, lastRateType, saveRateType } from '../rates.js';
-import { CATEGORIES, Seg, Confirm, toDateInput, parseNum } from '../components.jsx';
+import { money, usd, monthKeyFor, shiftKey, keyLabel, quickPicks } from '../month.js';
+import { CATEGORIES, Seg, Confirm, toDateInput, numToInput, catInfo } from '../components.jsx';
+import { useMoney, MoneyField } from '../money.jsx';
 
 /** Anotar (o editar) un gasto, el sueldo o un ingreso extra. */
 export default function Add({ ctx, editing, fixed, kind, onDone }) {
@@ -9,45 +9,45 @@ export default function Add({ ctx, editing, fixed, kind, onDone }) {
   const e = editing;
   const [type, setType] = useState(e ? (e.kind ? 'in' : 'out') : kind ? 'in' : 'out');
   const [inKind, setInKind] = useState(e?.kind || kind || 'salary');
-  const [amount, setAmount] = useState(e ? String(e.amount).replace('.', ',') : fixed ? String(fixed.amount || '') : '');
+  const m = useMoney(rates, e || (fixed ? { amount: fixed.amount, currency: fixed.currency, fixed: true } : {}));
   const [category, setCategory] = useState(e?.category || (fixed ? 'Pagos fijos' : lastCategory(data) || 'Súper'));
   const [note, setNote] = useState(e?.note ?? (fixed ? fixed.name : ''));
   const [date, setDate] = useState(toDateInput(e?.date || Date.now()));
-  const [currency, setCurrency] = useState(e?.currency || fixed?.currency || 'ARS');
-  const [rateType, setRateType] = useState(e?.rateType || (fixed?.currency === 'USD' ? 'tarjeta' : lastRateType()));
-  const [rate, setRate] = useState(e?.rate ? String(e.rate) : String((rates || {})[e?.rateType || (fixed?.currency === 'USD' ? 'tarjeta' : lastRateType())] || ''));
   const [monthKey, setMonthKey] = useState(e?.month || null); // null = el sugerido por la fecha
   const [err, setErr] = useState('');
-  const pickRate = (t) => { setRateType(t); if (rates?.[t]) setRate(String(rates[t])); };
   const [del, setDel] = useState(false);
 
-  const value = parseNum(amount);
-  const rateNum = parseNum(rate);
-  const isUsd = currency === 'USD';
   const ts = (() => {
     if (e && date === toDateInput(e.date)) return e.date;
     if (date === toDateInput(Date.now())) return Date.now();
     return new Date(date + 'T12:00').getTime();
   })();
-  const col = type === 'in' ? 'incomes' : 'expenses';
   const suggested = monthKeyFor(ts);
   const salaryMonth = monthKey || suggested;
   const isSalary = type === 'in' && inKind === 'salary';
+  const picks = !e && !fixed && type === 'out' ? quickPicks(data) : [];
+
+  // Gasto rápido: completa monto, moneda, categoría y nota con la última vez
+  const usePick = (x) => {
+    m.setAmount(numToInput(x.amount));
+    m.setCurrency(x.currency || 'ARS');
+    if (x.currency === 'USD' && x.rateType) m.pickRate(x.rateType);
+    setCategory(x.category); setNote(x.note); setErr('');
+  };
 
   async function save() {
-    if (!(value > 0)) return setErr('Poné un monto');
-    if (isUsd && !(rateNum > 0)) return setErr('Poné a cuánto está el dólar');
+    const problem = m.error();
+    if (problem) return setErr(problem);
+    const col = type === 'in' ? 'incomes' : 'expenses';
     const id = e?.id || store.newId(col);
-    const base = { amount: value, currency, date: ts, note: note.trim(), createdAt: e?.createdAt || Date.now(),
-      ...(isUsd ? { rate: rateNum, rateType } : {}) };
-    if (isUsd) saveRateType(rateType);
+    const base = { ...m.fields(), date: ts, note: note.trim(), createdAt: e?.createdAt || Date.now() };
     if (type === 'in') {
       await store.set('incomes', id, { ...base, kind: inKind, ...(inKind === 'salary' ? { month: salaryMonth } : {}) });
       toast(inKind === 'salary' ? `💼 Sueldo anotado · arranca ${keyLabel(salaryMonth)}` : '💰 Ingreso anotado');
     } else {
       const fixedId = e?.fixedId || fixed?.id;
       await store.set('expenses', id, { ...base, category, ...(fixedId ? { fixedId } : {}) });
-      toast(fixed ? `✅ ${fixed.name} pagado` : `✅ Gasto de ${isUsd ? usd(value) : money(value)} anotado`);
+      toast(fixed ? `✅ ${fixed.name} pagado` : `✅ Gasto de ${m.isUsd ? usd(m.value) : money(m.value)} anotado`);
     }
     onDone();
   }
@@ -61,30 +61,20 @@ export default function Add({ ctx, editing, fixed, kind, onDone }) {
           <button className={'chip g' + (inKind === 'extra' ? ' on' : '')} onClick={() => setInKind('extra')}>💰 Extra</button>
         </div>
       )}
-      <div className="amount">
-        <span className="cur">{isUsd ? 'US$' : '$'}</span>
-        <input inputMode="decimal" placeholder="0" value={amount} autoFocus aria-label="Monto"
-          onChange={(ev) => { setAmount(ev.target.value.replace(/[^\d.,]/g, '')); setErr(''); }} />
-      </div>
-      <div className="chips" style={{ justifyContent: 'center' }}>
-        {[['ARS', '🇦🇷 Pesos'], ['USD', '🇺🇸 Dólares']].map(([c, l]) => (
-          <button key={c} className={'chip g' + (currency === c ? ' on' : '')} onClick={() => setCurrency(c)}>{l}</button>
-        ))}
-      </div>
-      {isUsd && (
-        <div className="usdbox">
-          <div className="chips">
-            {RATE_TYPES.map(([t, l]) => <button key={t} className={'chip' + (rateType === t ? ' on' : '')} onClick={() => pickRate(t)}>{l}</button>)}
+      {picks.length > 0 && (
+        <div className="quick">
+          <div className="label">⚡ Rápidos</div>
+          <div className="chips scroll">
+            {picks.map((x) => (
+              <button key={x.id} className="chip qp" onClick={() => usePick(x)}>
+                {catInfo(x.category).icon} {x.note} <small>{x.currency === 'USD' ? usd(x.amount) : money(x.amount)}</small>
+              </button>
+            ))}
           </div>
-          <div className="row" style={{ marginTop: 10 }}>
-            <span className="muted" style={{ fontSize: 13, fontWeight: 700 }}>1 US$ =</span>
-            <input className="input grow" inputMode="decimal" placeholder="$ cotización" aria-label="Cotización" value={rate}
-              onChange={(ev) => { setRate(ev.target.value.replace(/[^\d.,]/g, '')); setErr(''); }} />
-          </div>
-          {value > 0 && rateNum > 0 && <div className="hint">≈ <b className="money">{money(value * rateNum)}</b> en pesos{!rates ? '' : ' · cotización de hoy, la podés cambiar'}</div>}
-          {!rates && !e && <div className="hint">No pude traer la cotización (¿sin internet?). Escribila a mano.</div>}
         </div>
       )}
+
+      <MoneyField m={m} onChange={() => setErr('')} />
 
       {type === 'out' && !fixed && !e?.fixedId && (
         <>
@@ -97,11 +87,11 @@ export default function Add({ ctx, editing, fixed, kind, onDone }) {
         </>
       )}
 
-      {!(type === 'in' && inKind === 'salary') && (
-        <input className="input" style={{ marginTop: 14 }} placeholder={type === 'in' ? 'De dónde (ej: aguinaldo, venta)' : '¿Qué fue? (opcional)'}
+      {!isSalary && (
+        <input className="input" style={{ marginTop: 14 }} placeholder={type === 'in' ? 'De dónde (ej: aguinaldo, venta)' : '¿Qué fue? (ej: Coto, SUBE)'}
           aria-label="Nota" value={note} onChange={(ev) => setNote(ev.target.value)} />
       )}
-      <label className="label" style={{ marginTop: 14 }}>{type === 'in' && inKind === 'salary' ? '¿Qué día cobraste?' : 'Fecha'}</label>
+      <label className="label" style={{ marginTop: 14 }}>{isSalary ? '¿Qué día cobraste?' : 'Fecha'}</label>
       <input className="input" type="date" value={date} onChange={(ev) => setDate(ev.target.value)} aria-label="Fecha" />
       {isSalary && <>
         <label className="label" style={{ marginTop: 14 }}>¿De qué mes es este sueldo?</label>

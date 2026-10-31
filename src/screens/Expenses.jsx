@@ -1,9 +1,29 @@
 import { useState } from 'react';
 import { money, usd, ars, summary, dayStart } from '../month.js';
-import { catInfo, fmtDate } from '../components.jsx';
-import { MonthHeader, ExpenseRow } from './Home.jsx';
+import { catInfo, fmtDate, Seg } from '../components.jsx';
+import { MonthHeader, ExpenseRow, CompareLine } from './Home.jsx';
+import FixedView from './Fixed.jsx';
+import History from './History.jsx';
 
-export default function Expenses({ ctx }) {
+/** Pestaña Gastos: el mes (por categoría y día), los pagos fijos y el historial de meses. */
+export default function Expenses({ ctx, ps }) {
+  const view = ctx.movesView;
+  return (
+    <>
+      {view === 'history' ? <div className="page-title">Meses</div> : <MonthHeader ctx={ctx} title={view === 'fixed' ? 'Pagos fijos' : 'Gastos'} />}
+      <div style={{ marginTop: 12 }}>
+        <Seg value={view} onChange={ctx.setMovesView} options={[['month', '🧾 Gastos'], ['fixed', '📌 Fijos'], ['history', '📊 Meses']]} />
+      </div>
+      <div key={view} className="page">
+        {view === 'month' && <MonthView ctx={ctx} ps={ps} />}
+        {view === 'fixed' && <FixedView ctx={ctx} />}
+        {view === 'history' && <History ctx={ctx} ps={ps} />}
+      </div>
+    </>
+  );
+}
+
+function MonthView({ ctx, ps }) {
   const { data, period, rates } = ctx;
   const s = summary(data, period, rates);
   const [cat, setCat] = useState(null);
@@ -20,11 +40,11 @@ export default function Expenses({ ctx }) {
 
   return (
     <>
-      <MonthHeader ctx={ctx} title="Gastos" />
       <section className="card">
         <div className="card-t">Gastaste en total</div>
         <div style={{ fontSize: 30, fontWeight: 900 }} className="money">{money(s.spent)}</div>
-        {s.spentUsd > 0 && <div className="hint" style={{ marginTop: 0 }}>Incluye {usd(s.spentUsd)} pagados en dólares</div>}
+        <CompareLine ctx={ctx} ps={ps} />
+        {s.spentUsd > 0 && <div className="hint" style={{ marginTop: 2 }}>Incluye {usd(s.spentUsd)} pagados en dólares</div>}
         {s.cats.length > 0 && <>
           <div className="card-t" style={{ marginTop: 16 }}>¿En qué?</div>
           {s.cats.map((c) => {

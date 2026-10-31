@@ -1,14 +1,15 @@
 import { useEffect, useMemo, useState } from 'react';
 import { periods, inPeriod } from './month.js';
 import { fetchRates } from './rates.js';
-import { Icon, Sheet, parseNum, toDateInput } from './components.jsx';
+import { Icon, Sheet, parseNum, toDateInput, fmtInput } from './components.jsx';
 import { authErrorText } from './store/firebase.js';
 import Home from './screens/Home.jsx';
 import Expenses from './screens/Expenses.jsx';
 import Settings from './screens/Settings.jsx';
 import Add from './screens/Add.jsx';
+import { SaveSheet } from './screens/Savings.jsx';
 
-const COLS = ['incomes', 'expenses', 'fixed'];
+const COLS = ['incomes', 'expenses', 'fixed', 'savings'];
 const EMPTY = { loaded: {} };
 
 export default function App({ store }) {
@@ -19,10 +20,11 @@ export default function App({ store }) {
   const [toastMsg, setToastMsg] = useState(null);
   const [sel, setSel] = useState(null); // id del mes elegido (null = el actual)
   const [rates, setRates] = useState(null);
+  const [movesView, setMovesView] = useState('month'); // Gastos: month | fixed | history
   useEffect(() => { fetchRates().then(setRates); }, []);
 
   // Al cambiar de usuario se limpia todo: nunca se ven datos de otra cuenta.
-  useEffect(() => store.onAuth((u) => { setUser(u); setData(EMPTY); setSel(null); setTab('home'); setSheet(null); }), [store]);
+  useEffect(() => store.onAuth((u) => { setUser(u); setData(EMPTY); setSel(null); setTab('home'); setSheet(null); setMovesView('month'); }), [store]);
   useEffect(() => {
     if (!user) return;
     const unsubs = COLS.map((c) => store.subscribe(c, (rows) => setData((d) => ({ ...d, [c]: rows, loaded: { ...d.loaded, [c]: true } }))));
@@ -51,13 +53,19 @@ export default function App({ store }) {
     prev: idx > 0 ? () => setSel(ps[idx - 1].id) : null,
     next: idx < ps.length - 1 ? () => setSel(ps[idx + 1].id) : null,
     openAdd: (opts = {}) => setSheet({ type: 'add', ...opts }),
+    openSave: (opts = {}) => setSheet({ type: 'save', ...opts }),
+    movesView, setMovesView,
+    goMoves: (v) => { setMovesView(v); go('moves'); },
+    selectMonth: (id) => { setSel(id); setMovesView('month'); window.scrollTo(0, 0); },
   };
 
   return (
     <div className="app">
-      {tab === 'home' && <Home ctx={ctx} />}
-      {tab === 'moves' && <Expenses ctx={ctx} />}
-      {tab === 'settings' && <Settings ctx={ctx} />}
+      <div key={tab} className="page">
+        {tab === 'home' && <Home ctx={ctx} ps={ps} />}
+        {tab === 'moves' && <Expenses ctx={ctx} ps={ps} />}
+        {tab === 'settings' && <Settings ctx={ctx} />}
+      </div>
 
       {tab !== 'settings' && <button className="fab" onClick={() => ctx.openAdd()} aria-label="Anotar"><Icon.plus /></button>}
       <nav className="nav">
@@ -68,7 +76,12 @@ export default function App({ store }) {
 
       {sheet?.type === 'add' && (
         <Sheet title={sheet.editing ? 'Editar' : sheet.fixed ? `Pagar ${sheet.fixed.name}` : 'Anotar'} onClose={() => setSheet(null)}>
-          <Add ctx={ctx} editing={sheet.editing} fixed={sheet.fixed} kind={sheet.kind} onDone={() => { setSheet(null); setSel(null); }} />
+          <Add ctx={ctx} editing={sheet.editing} fixed={sheet.fixed} kind={sheet.kind} onDone={() => { if (!sheet.editing) setSel(null); setSheet(null); }} />
+        </Sheet>
+      )}
+      {sheet?.type === 'save' && (
+        <Sheet title={sheet.editing ? 'Editar ahorro' : sheet.kind === 'out' ? 'Sacar de ahorros' : 'Guardar en ahorros'} onClose={() => setSheet(null)}>
+          <SaveSheet ctx={ctx} editing={sheet.editing} kind={sheet.kind} amount={sheet.amount} date={sheet.date} onDone={() => setSheet(null)} />
         </Sheet>
       )}
       {toastMsg && <div className="toast">{toastMsg}</div>}
@@ -124,7 +137,7 @@ function Welcome({ store }) {
       <p>Anotá tu último sueldo y arrancamos.</p>
       <div style={{ display: 'grid', gap: 10 }}>
         <input className="input" placeholder="Tu nombre" aria-label="Nombre" value={name} onChange={(e) => setName(e.target.value)} />
-        <input className="input" inputMode="decimal" placeholder="Último sueldo cobrado (opcional)" aria-label="Sueldo" value={salary} onChange={(e) => setSalary(e.target.value.replace(/[^\d.,]/g, ''))} />
+        <input className="input" inputMode="decimal" placeholder="Último sueldo cobrado (opcional)" aria-label="Sueldo" value={salary} onChange={(e) => setSalary(fmtInput(e.target.value, salary))} />
         {parseNum(salary) > 0 && <>
           <label className="label" style={{ marginBottom: -4 }}>¿Qué día lo cobraste?</label>
           <input className="input" type="date" aria-label="Fecha del sueldo" value={date} onChange={(e) => setDate(e.target.value)} />
