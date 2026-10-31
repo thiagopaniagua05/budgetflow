@@ -71,6 +71,14 @@ export default function Home({ ctx }) {
         </section>
       )}
 
+      {isCurrent && period.salary && Date.now() - period.salary.date > 27 * 864e5 && (
+        <button className="card nudge" onClick={() => ctx.openAdd({ kind: 'salary' })}>
+          <span>💼</span>
+          <div className="grow"><b>¿Ya cobraste?</b><div className="s">Anotá el sueldo nuevo y empieza el mes siguiente.</div></div>
+          <span className="link">Anotar →</span>
+        </button>
+      )}
+
       {s.fixed.length > 0 && period.id !== 'pre' && (
         <section className="card">
           <div className="card-h">

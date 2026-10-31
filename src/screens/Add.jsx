@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { money, usd, monthLabel } from '../month.js';
+import { money, usd, monthKeyFor, shiftKey, keyLabel } from '../month.js';
 import { RATE_TYPES, lastRateType, saveRateType } from '../rates.js';
 import { CATEGORIES, Seg, Confirm, toDateInput, parseNum } from '../components.jsx';
 
@@ -16,6 +16,7 @@ export default function Add({ ctx, editing, fixed, kind, onDone }) {
   const [currency, setCurrency] = useState(e?.currency || fixed?.currency || 'ARS');
   const [rateType, setRateType] = useState(e?.rateType || (fixed?.currency === 'USD' ? 'tarjeta' : lastRateType()));
   const [rate, setRate] = useState(e?.rate ? String(e.rate) : String((rates || {})[e?.rateType || (fixed?.currency === 'USD' ? 'tarjeta' : lastRateType())] || ''));
+  const [monthKey, setMonthKey] = useState(e?.month || null); // null = el sugerido por la fecha
   const [err, setErr] = useState('');
   const pickRate = (t) => { setRateType(t); if (rates?.[t]) setRate(String(rates[t])); };
   const [del, setDel] = useState(false);
@@ -29,6 +30,9 @@ export default function Add({ ctx, editing, fixed, kind, onDone }) {
     return new Date(date + 'T12:00').getTime();
   })();
   const col = type === 'in' ? 'incomes' : 'expenses';
+  const suggested = monthKeyFor(ts);
+  const salaryMonth = monthKey || suggested;
+  const isSalary = type === 'in' && inKind === 'salary';
 
   async function save() {
     if (!(value > 0)) return setErr('Poné un monto');
@@ -38,8 +42,8 @@ export default function Add({ ctx, editing, fixed, kind, onDone }) {
       ...(isUsd ? { rate: rateNum, rateType } : {}) };
     if (isUsd) saveRateType(rateType);
     if (type === 'in') {
-      await store.set('incomes', id, { ...base, kind: inKind });
-      toast(inKind === 'salary' ? `💼 Sueldo anotado · arranca ${monthLabel(ts)}` : '💰 Ingreso anotado');
+      await store.set('incomes', id, { ...base, kind: inKind, ...(inKind === 'salary' ? { month: salaryMonth } : {}) });
+      toast(inKind === 'salary' ? `💼 Sueldo anotado · arranca ${keyLabel(salaryMonth)}` : '💰 Ingreso anotado');
     } else {
       const fixedId = e?.fixedId || fixed?.id;
       await store.set('expenses', id, { ...base, category, ...(fixedId ? { fixedId } : {}) });
@@ -99,7 +103,15 @@ export default function Add({ ctx, editing, fixed, kind, onDone }) {
       )}
       <label className="label" style={{ marginTop: 14 }}>{type === 'in' && inKind === 'salary' ? '¿Qué día cobraste?' : 'Fecha'}</label>
       <input className="input" type="date" value={date} onChange={(ev) => setDate(ev.target.value)} aria-label="Fecha" />
-      {type === 'in' && inKind === 'salary' && <div className="hint">Desde este día arranca tu mes de <b>{monthLabel(ts)}</b>.</div>}
+      {isSalary && <>
+        <label className="label" style={{ marginTop: 14 }}>¿De qué mes es este sueldo?</label>
+        <div className="chips">
+          {[-1, 0, 1].map((n) => shiftKey(suggested, n)).map((k) => (
+            <button key={k} className={'chip g' + (salaryMonth === k ? ' on' : '')} onClick={() => setMonthKey(k)}>{keyLabel(k)}</button>
+          ))}
+        </div>
+        <div className="hint">Desde el día que cobraste arranca tu mes de <b>{keyLabel(salaryMonth)}</b>. Todo lo que anotes después cuenta para ese mes, hasta que anotes el próximo sueldo.</div>
+      </>}
 
       {err && <div className="error">{err}</div>}
       <div className="row" style={{ marginTop: 16 }}>

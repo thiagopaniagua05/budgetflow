@@ -14,11 +14,22 @@ export const usd = (n) => `US$${(+n || 0).toLocaleString('es-AR', { maximumFract
 /** Monto en pesos de un movimiento: los de dólares se guardan con la cotización del momento. */
 export const ars = (x) => (x?.currency === 'USD' ? (+x.amount || 0) * (+x.rate || 0) : +x?.amount || 0);
 
-/** Nombre del mes que paga un sueldo: si cobrás el 31/10, es la plata de noviembre. */
-export function monthLabel(ts, now = Date.now()) {
+/** Clave 'AAAA-MM' sugerida para un sueldo: si cobrás el 31/10 (o hasta 10 días antes de fin de mes), es la plata de noviembre. */
+export function monthKeyFor(ts) {
   const d = new Date(ts + 10 * DAY);
-  return MONTHS[d.getMonth()] + (d.getFullYear() !== new Date(now).getFullYear() ? ` ${d.getFullYear()}` : '');
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 }
+export function shiftKey(k, n) {
+  const [y, m] = k.split('-').map(Number);
+  const d = new Date(y, m - 1 + n, 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+export function keyLabel(k, now = Date.now()) {
+  const [y, m] = k.split('-').map(Number);
+  return MONTHS[m - 1] + (y !== new Date(now).getFullYear() ? ` ${y}` : '');
+}
+/** Nombre del mes que paga un sueldo (el que elegiste al anotarlo, o el sugerido por la fecha). */
+export const monthLabel = (ts, now = Date.now(), key) => keyLabel(key || monthKeyFor(ts), now);
 
 /**
  * Lista de meses (del más viejo al más nuevo). Cada sueldo abre un mes nuevo.
@@ -29,9 +40,9 @@ export function periods(data, now = Date.now()) {
   const list = salaries.map((s, i) => ({
     id: s.id, salary: s, start: s.date,
     end: salaries[i + 1] ? salaries[i + 1].date : Infinity,
-    label: monthLabel(s.date, now),
+    label: monthLabel(s.date, now, s.month),
   }));
-  if (!list.length) return [{ id: 'none', salary: null, start: -Infinity, end: Infinity, label: 'Este mes' }];
+  if (!list.length) return [{ id: 'none', salary: null, start: -Infinity, end: Infinity, label: MONTHS[new Date(now).getMonth()] }];
   const first = list[0].start;
   const before = [...(data.expenses || []), ...(data.incomes || []).filter((i) => i.kind !== 'salary')].some((x) => x.date < first);
   if (before) list.unshift({ id: 'pre', salary: null, start: -Infinity, end: first, label: 'Antes del sueldo' });
